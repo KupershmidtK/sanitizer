@@ -1,0 +1,1 @@
+docker run -v C:\Users\Kirill.Kupershmidt\Desktop\PROGRAMMING\Sanitizer:/home/sanitizer --rm -it sanitizer
