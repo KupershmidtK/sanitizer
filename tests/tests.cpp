@@ -15,6 +15,13 @@ void* thread_func(void* arg) {
     pthread_mutex_unlock(&m3);
     pthread_mutex_unlock(&m2);
     pthread_mutex_unlock(&m1);
+
+    pthread_mutex_lock(&m1);
+    pthread_mutex_lock(&m3);
+    sleep(1);
+    pthread_mutex_unlock(&m3);
+    pthread_mutex_unlock(&m1);
+
     return nullptr;
 }
 
