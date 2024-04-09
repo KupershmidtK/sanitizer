@@ -8,6 +8,7 @@
 #include <atomic>
 #include <list>
 #include <map>
+#include <semaphore.h>
 
 typedef int (*pthread_mutex_lock_func_t)(pthread_mutex_t*);
 
@@ -27,10 +28,14 @@ void print_stack_trace();
 class Graph {
   std::map<uintptr_t, std::list<uintptr_t> > adjacency_list;
 
+  sem_t graph_mutex;
+
   bool isCyclicFunc(uintptr_t v, bool visited[], bool* rs);
   int getSize() { return adjacency_list.size(); }
 
 public:
+    Graph() { sem_init(&graph_mutex, 0, 1); }
+
     void addEdge(uintptr_t v, uintptr_t w);
     bool isCyclic();
     void print_result();
@@ -116,8 +121,9 @@ void print_stack_trace() {
 
 void Graph::addEdge(uintptr_t from, uintptr_t to) {
   // std::cout << "add adjacency list: from -> 0x" << std::hex << from << " to -> 0x" << std::hex << to << std::endl;
-
+  sem_wait(&graph_mutex);
   adjacency_list[from].push_back(to);
+  sem_post(&graph_mutex);
 }
 
 
@@ -138,22 +144,26 @@ void Graph::print_result() {
 
 bool Graph::isCyclic()
 {
-    int size = getSize();
-    bool* visited = new bool[size];
-    bool* recStack = new bool[size];
-    for (int i = 0; i < size; i++) {
-        visited[i] = false;
-        recStack[i] = false;
-    }
- 
-    // Call the recursive helper function
-    // to detect cycle in different DFS trees
-    for (int i = 0; i < size; i++)
-        if (!visited[i]
-            && isCyclicFunc(i, visited, recStack))
-            return true;
- 
-    return false;
+  sem_wait(&graph_mutex);
+
+  int size = getSize();
+  bool* visited = new bool[size];
+  bool* recStack = new bool[size];
+  for (int i = 0; i < size; i++) {
+      visited[i] = false;
+      recStack[i] = false;
+  }
+
+  // Call the recursive helper function
+  // to detect cycle in different DFS trees
+  for (int i = 0; i < size; i++)
+      if (!visited[i] && isCyclicFunc(i, visited, recStack)) {
+          sem_post(&graph_mutex);
+          return true;
+      }
+
+  sem_post(&graph_mutex);
+  return false;
 }
 
 bool Graph::isCyclicFunc(uintptr_t v, bool visited[], bool* recStack)
