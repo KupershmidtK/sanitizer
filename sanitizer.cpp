@@ -30,14 +30,14 @@ class Graph {
 
   sem_t graph_mutex;
 
-  bool isCyclicFunc(uintptr_t v, bool visited[], bool* rs);
+  bool isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack);
   int getSize() { return adjacency_list.size(); }
 
 public:
     Graph() { sem_init(&graph_mutex, 0, 1); }
 
     void addEdge(uintptr_t v, uintptr_t w);
-    bool isCyclic();
+    bool isCyclic(uintptr_t vertex);
     void print_result();
 } mutexGraph;
 
@@ -57,7 +57,11 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     add_mutex(m_addr);
     
     // print_stack_trace();
-    mutexGraph.print_result();
+    // mutexGraph.print_result();
+    if (mutexGraph.isCyclic(m_addr)){
+      std::cout << "DEADLOCK detected!!!" << std::endl;
+    }
+
 
     return origin_func(mutex);
 }
@@ -86,8 +90,6 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 // }
 
 void add_mutex(uintptr_t mutex) {
-  //std::cout << "add mutex stack -> 0x" << std::hex << mutex << std::endl;
-
   if(!locked_mutex.empty()) {
     uintptr_t from = locked_mutex.back();
     mutexGraph.addEdge(from, mutex);
@@ -124,6 +126,7 @@ void Graph::addEdge(uintptr_t from, uintptr_t to) {
   sem_wait(&graph_mutex);
   adjacency_list[from].push_back(to);
   sem_post(&graph_mutex);
+  print_result();
 }
 
 
@@ -142,7 +145,7 @@ void Graph::print_result() {
 }
 
 
-bool Graph::isCyclic()
+bool Graph::isCyclic(uintptr_t vertex)
 {
   sem_wait(&graph_mutex);
 
@@ -164,29 +167,48 @@ bool Graph::isCyclic()
 
   sem_post(&graph_mutex);
   return false;
+    // int size = getSize();
+    // bool* visited = new bool[size];
+    // bool* recStack = new bool[size];
+    // for (int i = 0; i < size; i++) {
+    //     visited[i] = false;
+    //     recStack[i] = false;
+    // }
+
+    std::map<uintptr_t, bool> visited;
+    std::map<uintptr_t, bool> rec_stack;
+    for(const auto& vertex : adjacency_list) {
+      visited[vertex.first] = false;
+      rec_stack[vertex.first] = false;
+    }
+ 
+    // Call the recursive helper function
+    // to detect cycle in different DFS trees
+    return isCyclicFunc(vertex, visited, rec_stack);
 }
 
-bool Graph::isCyclicFunc(uintptr_t v, bool visited[], bool* recStack)
+bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack)
 {
     if (visited[v] == false) {
         // Mark the current node as visited
         // and part of recursion stack
         visited[v] = true;
-        recStack[v] = true;
+        rec_stack[v] = true;
  
         // Recur for all the vertices adjacent to this
         // vertex
+        std::list<uintptr_t> vtx = adjacency_list[v];
         std::list<uintptr_t>::iterator i;
-        for (i = adjacency_list[v].begin(); i != adjacency_list[v].end(); ++i) {
+        for (i = vtx.begin(); i != vtx.end(); ++i) {
             if (!visited[*i]
-                && isCyclicFunc(*i, visited, recStack))
+                && isCyclicFunc(*i, visited, rec_stack))
                 return true;
-            else if (recStack[*i])
+            else if (rec_stack[*i])
                 return true;
         }
     }
  
     // Remove the vertex from recursion stack
-    recStack[v] = false;
+    rec_stack[v] = false;
     return false;
 }
