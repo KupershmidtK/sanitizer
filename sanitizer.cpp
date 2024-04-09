@@ -10,6 +10,10 @@
 #include <map>
 #include <semaphore.h>
 
+
+#define RESET "\033[0m"
+#define RED "\033[31m"
+
 typedef int (*pthread_mutex_lock_func_t)(pthread_mutex_t*);
 
 static thread_local std::list<uintptr_t> locked_mutex; 
@@ -18,9 +22,6 @@ static thread_local std::list<uintptr_t> locked_mutex;
  
 
 // static int get_tid();
-void add_adjacency_list2(uintptr_t from, uintptr_t to);
-void print_result();
-void print_result2();
 void add_mutex(uintptr_t mutex);
 void remove_mutex(uintptr_t mutex);
 
@@ -60,7 +61,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     // print_stack_trace();
     // mutexGraph.print_result();
     if (mutexGraph.isCyclic(m_addr)){
-      std::cout << "DEADLOCK detected!!!" << std::endl;
+      std::cout << RED << "DEADLOCK detected!!!" << RESET << std::endl;
       mutexGraph.print_stack_trace();
     }
 
@@ -171,16 +172,15 @@ bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::m
 }
 
 void Graph::print_stack_trace() {
-  void *array[5];
+  void *array[3];
   char **strings;
-  int size, i;
 
-  size = backtrace (array, 5);
+  int size = backtrace (array, 3);
   strings = backtrace_symbols (array, size);
   if (strings != NULL) {
-    std::cout << "---------------------------------------\n";
-    for (i = 2; i < size; i++) // skip first and second records
-      std::cout << strings[i] << std::endl;
+    // std::cout << "---------------------------------------\n";
+    //for (int i = 2; i < size; i++) // skip first and second records
+      std::cout << strings[2] << std::endl << std::endl;
   }
 
   free (strings);
