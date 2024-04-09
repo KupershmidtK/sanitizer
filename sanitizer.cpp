@@ -23,7 +23,7 @@ void print_result();
 void print_result2();
 void add_mutex(uintptr_t mutex);
 void remove_mutex(uintptr_t mutex);
-void print_stack_trace();
+
 
 class Graph {
   std::map<uintptr_t, std::list<uintptr_t> > adjacency_list;
@@ -38,7 +38,8 @@ public:
 
     void addEdge(uintptr_t v, uintptr_t w);
     bool isCyclic(uintptr_t vertex);
-    void print_result();
+    void print_stack_trace();
+
 } mutexGraph;
 
 extern "C" {
@@ -60,6 +61,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     // mutexGraph.print_result();
     if (mutexGraph.isCyclic(m_addr)){
       std::cout << "DEADLOCK detected!!!" << std::endl;
+      mutexGraph.print_stack_trace();
     }
 
 
@@ -101,24 +103,6 @@ void remove_mutex(uintptr_t mutex) {
   locked_mutex.remove(mutex);
 }
 
-void print_stack_trace() {
-  void *array[10];
-  char **strings;
-  int size, i;
-
-  size = backtrace (array, 10);
-  strings = backtrace_symbols (array, size);
-  if (strings != NULL)
-  {
-
-    printf ("Obtained %d stack frames.\n", size);
-    for (i = 0; i < size; i++)
-      printf ("%s\n", strings[i]);
-  }
-
-  free (strings);
-}
-
 // ------------------------------------------------
 
 void Graph::addEdge(uintptr_t from, uintptr_t to) {
@@ -126,55 +110,28 @@ void Graph::addEdge(uintptr_t from, uintptr_t to) {
   sem_wait(&graph_mutex);
   adjacency_list[from].push_back(to);
   sem_post(&graph_mutex);
-  print_result();
+  // print_result();
 }
 
 
-void Graph::print_result() {
-  std::cout << "adjacency list " << adjacency_list.size() << std::endl << "================" << std::endl;
+// void Graph::print_result() {
+//   std::cout << "adjacency list " << adjacency_list.size() << std::endl << "================" << std::endl;
   
-  for(const auto& entity : adjacency_list) {
-    std::cout << "0x" << std::hex << entity.first << " -> ";
+//   for(const auto& entity : adjacency_list) {
+//     std::cout << "0x" << std::hex << entity.first << " -> ";
     
-    for(const auto& item : entity.second) {
-      std::cout << " 0x" << std::hex << item;
-    }
+//     for(const auto& item : entity.second) {
+//       std::cout << " 0x" << std::hex << item;
+//     }
 
-    std::cout << std::endl;
-  }
-}
+//     std::cout << std::endl;
+//   }
+// }
 
 
 bool Graph::isCyclic(uintptr_t vertex)
 {
   sem_wait(&graph_mutex);
-
-  int size = getSize();
-  bool* visited = new bool[size];
-  bool* recStack = new bool[size];
-  for (int i = 0; i < size; i++) {
-      visited[i] = false;
-      recStack[i] = false;
-  }
-
-  // Call the recursive helper function
-  // to detect cycle in different DFS trees
-  for (int i = 0; i < size; i++)
-      if (!visited[i] && isCyclicFunc(i, visited, recStack)) {
-          sem_post(&graph_mutex);
-          return true;
-      }
-
-  sem_post(&graph_mutex);
-  return false;
-    // int size = getSize();
-    // bool* visited = new bool[size];
-    // bool* recStack = new bool[size];
-    // for (int i = 0; i < size; i++) {
-    //     visited[i] = false;
-    //     recStack[i] = false;
-    // }
-
     std::map<uintptr_t, bool> visited;
     std::map<uintptr_t, bool> rec_stack;
     for(const auto& vertex : adjacency_list) {
@@ -182,9 +139,9 @@ bool Graph::isCyclic(uintptr_t vertex)
       rec_stack[vertex.first] = false;
     }
  
-    // Call the recursive helper function
-    // to detect cycle in different DFS trees
-    return isCyclicFunc(vertex, visited, rec_stack);
+    bool result = isCyclicFunc(vertex, visited, rec_stack);
+    sem_post(&graph_mutex);
+    return result;
 }
 
 bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack)
@@ -211,4 +168,20 @@ bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::m
     // Remove the vertex from recursion stack
     rec_stack[v] = false;
     return false;
+}
+
+void Graph::print_stack_trace() {
+  void *array[5];
+  char **strings;
+  int size, i;
+
+  size = backtrace (array, 5);
+  strings = backtrace_symbols (array, size);
+  if (strings != NULL) {
+    std::cout << "---------------------------------------\n";
+    for (i = 2; i < size; i++) // skip first and second records
+      std::cout << strings[i] << std::endl;
+  }
+
+  free (strings);
 }
