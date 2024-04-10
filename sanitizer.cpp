@@ -1,55 +1,31 @@
+#include "sanitizer.h"
 #include <dlfcn.h>
 #include <pthread.h>
 #include <execinfo.h>
 #include <iostream>
-#include <sstream>
-#include <string>
-#include <memory>
-#include <atomic>
-#include <list>
-#include <map>
-#include <semaphore.h>
-
-
-#define RESET "\033[0m"
-#define RED "\033[31m"
 
 typedef int (*pthread_mutex_lock_func_t)(pthread_mutex_t*);
 
+Graph mutexGraph;
+
 static thread_local std::list<uintptr_t> locked_mutex; 
 
-// static std::multimap<uintptr_t, uintptr_t> adjacency_list; 
- 
+static void add_mutex(uintptr_t mutex) {
+  if(!locked_mutex.empty()) {
+    uintptr_t from = locked_mutex.back();
+    mutexGraph.add_edge(from, mutex);
+  }
+  locked_mutex.push_back(mutex);
+}
 
-// static int get_tid();
-void add_mutex(uintptr_t mutex);
-void remove_mutex(uintptr_t mutex);
-
-
-class Graph {
-  std::map<uintptr_t, std::list<uintptr_t> > adjacency_list;
-
-  sem_t graph_mutex;
-
-  bool isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack);
-  int getSize() { return adjacency_list.size(); }
-
-public:
-    Graph() { sem_init(&graph_mutex, 0, 1); }
-
-    void addEdge(uintptr_t v, uintptr_t w);
-    bool isCyclic(uintptr_t vertex);
-    void print_stack_trace();
-
-} mutexGraph;
+static void remove_mutex(uintptr_t mutex) {
+  locked_mutex.remove(mutex);
+}
 
 extern "C" {
 
 // your c code
 // linkage naming
-void __attribute__((destructor)) unload() {
-  // print_result();
-}
 
 int pthread_mutex_lock(pthread_mutex_t *mutex) {
     pthread_mutex_lock_func_t origin_func;
@@ -58,11 +34,8 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     uintptr_t m_addr = reinterpret_cast<uintptr_t>(mutex);
     add_mutex(m_addr);
     
-    // print_stack_trace();
-    // mutexGraph.print_result();
-    if (mutexGraph.isCyclic(m_addr)){
-      std::cout << RED << "DEADLOCK detected!!!" << RESET << std::endl;
-      mutexGraph.print_stack_trace();
+    if (mutexGraph.is_deadlock_detected(m_addr)){
+      mutexGraph.print_deadlock_info();
     }
 
 
@@ -92,45 +65,17 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 //   return *tid_ptr;
 // }
 
-void add_mutex(uintptr_t mutex) {
-  if(!locked_mutex.empty()) {
-    uintptr_t from = locked_mutex.back();
-    mutexGraph.addEdge(from, mutex);
-  }
-  locked_mutex.push_back(mutex);
-}
 
-void remove_mutex(uintptr_t mutex) {
-  locked_mutex.remove(mutex);
-}
 
 // ------------------------------------------------
 
-void Graph::addEdge(uintptr_t from, uintptr_t to) {
-  // std::cout << "add adjacency list: from -> 0x" << std::hex << from << " to -> 0x" << std::hex << to << std::endl;
+void Graph::add_edge(uintptr_t from, uintptr_t to) {
   sem_wait(&graph_mutex);
   adjacency_list[from].push_back(to);
   sem_post(&graph_mutex);
-  // print_result();
 }
 
-
-// void Graph::print_result() {
-//   std::cout << "adjacency list " << adjacency_list.size() << std::endl << "================" << std::endl;
-  
-//   for(const auto& entity : adjacency_list) {
-//     std::cout << "0x" << std::hex << entity.first << " -> ";
-    
-//     for(const auto& item : entity.second) {
-//       std::cout << " 0x" << std::hex << item;
-//     }
-
-//     std::cout << std::endl;
-//   }
-// }
-
-
-bool Graph::isCyclic(uintptr_t vertex)
+bool Graph::is_deadlock_detected(uintptr_t vertex)
 {
   sem_wait(&graph_mutex);
     std::map<uintptr_t, bool> visited;
@@ -140,26 +85,26 @@ bool Graph::isCyclic(uintptr_t vertex)
       rec_stack[vertex.first] = false;
     }
  
-    bool result = isCyclicFunc(vertex, visited, rec_stack);
+    bool result = is_cyclic_func(vertex, visited, rec_stack);
+    
+    if (result) deadlock_count++;
+
     sem_post(&graph_mutex);
     return result;
 }
 
-bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack)
+bool Graph::is_cyclic_func(uintptr_t v, std::map<uintptr_t, bool>& visited, std::map<uintptr_t, bool>& rec_stack)
 {
     if (visited[v] == false) {
-        // Mark the current node as visited
-        // and part of recursion stack
+        // Mark the current node as visited and part of recursion stack
         visited[v] = true;
         rec_stack[v] = true;
  
-        // Recur for all the vertices adjacent to this
-        // vertex
+        // Recur for all the vertices adjacent to this vertex
         std::list<uintptr_t> vtx = adjacency_list[v];
         std::list<uintptr_t>::iterator i;
         for (i = vtx.begin(); i != vtx.end(); ++i) {
-            if (!visited[*i]
-                && isCyclicFunc(*i, visited, rec_stack))
+            if (!visited[*i] && is_cyclic_func(*i, visited, rec_stack))
                 return true;
             else if (rec_stack[*i])
                 return true;
@@ -171,16 +116,18 @@ bool Graph::isCyclicFunc(uintptr_t v, std::map<uintptr_t, bool>& visited, std::m
     return false;
 }
 
-void Graph::print_stack_trace() {
+void Graph::print_deadlock_info() {
   void *array[3];
   char **strings;
 
   int size = backtrace (array, 3);
   strings = backtrace_symbols (array, size);
   if (strings != NULL) {
-    // std::cout << "---------------------------------------\n";
     //for (int i = 2; i < size; i++) // skip first and second records
+    sem_wait(&print_mutex);
+      std::cout << RED << "DEADLOCK possible in function..." << RESET << std::endl;
       std::cout << strings[2] << std::endl << std::endl;
+      sem_post(&print_mutex);
   }
 
   free (strings);

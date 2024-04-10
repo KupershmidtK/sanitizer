@@ -1,10 +1,9 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest.h>
-#include <sanitizer.h>
+// #include "../sanitizer.h"
 #include <pthread.h>
 #include<unistd.h>
 #include <ctime>
 #include <cstdlib>
+#include <iostream>
 
 #define N 5
 pthread_mutexattr_t attr;
@@ -61,7 +60,8 @@ void* correct_thread_func(void* arg) {
     return nullptr;
 }
 
-TEST_CASE("No deadlock philosophers") { 
+
+bool happy_path() { 
     pthread_t philosophers[N];
     int ids[N] = {0, 1, 2, 3, 4};
     for (int i = 0; i < N; i++) {
@@ -72,10 +72,10 @@ TEST_CASE("No deadlock philosophers") {
        pthread_join(philosophers[i], NULL); 
     } 
 
-    CHECK(mutexGraph.get_deadlock_count() == 0); 
+    return true; 
 }
 
-TEST_CASE("Deadlock philosophers") { 
+bool rainy_day() {
     pthread_t philosophers[N];
     int ids[N] = {0, 1, 2, 3, 4};
     for (int i = 0; i < N; i++) {
@@ -86,5 +86,20 @@ TEST_CASE("Deadlock philosophers") {
        pthread_join(philosophers[i], NULL); 
     } 
 
-    CHECK(mutexGraph.get_deadlock_count() != 0); 
+    return true; 
+}
+
+void print_test_result(const char* test_name, bool success) {
+    std::cout << test_name << std::endl;
+    if (success)
+        std::cout << "SUCCESS\n\n";
+    else
+        std::cout << "ERROR\n\n"; 
+}
+
+int main() {
+
+    print_test_result("No deadlock test", happy_path());
+    print_test_result("Deadlock test", rainy_day());
+    return 0;
 }

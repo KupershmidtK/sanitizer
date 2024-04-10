@@ -1,5 +1,6 @@
 sanitizer.so
 tests/tests
+tests/mytests
 tests/doctest.h
 .clang-format
 .gitlab-ci.yml
