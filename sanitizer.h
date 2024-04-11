@@ -32,6 +32,17 @@ public:
     int get_deadlock_count() { return deadlock_count; }
 };
 
-extern Graph mutexGraph; // only for tests purpose 
+class MutexList {
+  std::list<uintptr_t> list; 
+  Graph* graph = nullptr;
+
+public:
+  MutexList(Graph* graph) {
+    this->graph = graph;
+  };
+
+  size_t add(uintptr_t mutex);
+  size_t remove(uintptr_t mutex) ;
+};
 
 #endif

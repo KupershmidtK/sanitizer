@@ -7,20 +7,7 @@
 typedef int (*pthread_mutex_lock_func_t)(pthread_mutex_t*);
 
 Graph mutexGraph;
-
-static thread_local std::list<uintptr_t> locked_mutex; 
-
-static void add_mutex(uintptr_t mutex) {
-  if(!locked_mutex.empty()) {
-    uintptr_t from = locked_mutex.back();
-    mutexGraph.add_edge(from, mutex);
-  }
-  locked_mutex.push_back(mutex);
-}
-
-static void remove_mutex(uintptr_t mutex) {
-  locked_mutex.remove(mutex);
-}
+thread_local MutexList mutexList(&mutexGraph);
 
 extern "C" {
 
@@ -32,7 +19,7 @@ int pthread_mutex_lock(pthread_mutex_t *mutex) {
     origin_func = (pthread_mutex_lock_func_t)dlsym(RTLD_NEXT, "pthread_mutex_lock");
 
     uintptr_t m_addr = reinterpret_cast<uintptr_t>(mutex);
-    add_mutex(m_addr);
+    mutexList.add(m_addr);
     
     if (mutexGraph.is_deadlock_detected(m_addr)){
       mutexGraph.print_deadlock_info();
@@ -47,7 +34,7 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
     origin_func = (pthread_mutex_lock_func_t)dlsym(RTLD_NEXT, "pthread_mutex_unlock");
 
     uintptr_t m_addr = reinterpret_cast<uintptr_t>(mutex);
-    remove_mutex(m_addr);
+    mutexList.remove(m_addr);
 
     return origin_func(mutex);
 }
@@ -68,6 +55,22 @@ int pthread_mutex_unlock(pthread_mutex_t *mutex) {
 
 
 // ------------------------------------------------
+size_t MutexList::add(uintptr_t mutex) {
+  if(!list.empty()) {
+    uintptr_t from = list.back();
+    if(graph) {
+      graph->add_edge(from, mutex);
+    }  
+  }
+  list.push_back(mutex);
+  return list.size();
+}
+
+size_t MutexList::remove(uintptr_t mutex) {
+  list.remove(mutex);
+  return list.size();
+}
+//--------------------------------------------------
 
 void Graph::add_edge(uintptr_t from, uintptr_t to) {
   sem_wait(&graph_mutex);
