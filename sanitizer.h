@@ -29,7 +29,7 @@ public:
     bool is_deadlock_detected(uintptr_t vertex);
     void print_deadlock_info();
 
-    int get_deadlock_count() { return deadlock_count; }
+    int get_deadlock_count() { return deadlock_count; } // for test purpose
 };
 
 class MutexList {

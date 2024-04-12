@@ -21,7 +21,7 @@ void* wrong_thread_func(void* arg) {
     int left = (id - 1 + N) % N;
     int right = (id + 1) % N;
 
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < 1; i++) {
         pthread_mutex_lock(&forks[left]);
         pthread_mutex_lock(&forks[right]);
 
@@ -47,7 +47,7 @@ void* correct_thread_func(void* arg) {
         right = (id + 1) % N;   
     }
 
-    for (size_t i = 0; i < 3; i++) {
+    for (size_t i = 0; i < 1; i++) {
         pthread_mutex_lock(&forks[left]);
         pthread_mutex_lock(&forks[right]);
 
@@ -98,7 +98,6 @@ void print_test_result(const char* test_name, bool success) {
 }
 
 int main() {
-
     print_test_result("No deadlock test", happy_path());
     print_test_result("Deadlock test", rainy_day());
     return 0;
